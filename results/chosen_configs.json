@@ -1,0 +1,86 @@
+{
+ "persistence/s0": {
+  "0": {
+   "span": 30,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 10,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.13
+  }
+ },
+ "moving_avg/s0": {
+  "0": {
+   "span": 30,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 3,
+   "prune": 0.0
+  }
+ },
+ "ridge_ar/s0": {
+  "0": {
+   "span": 30,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_max",
+   "param": 1.5,
+   "prune": 0.0
+  }
+ },
+ "iforest/s0": {
+  "0": {
+   "span": 60,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 30,
+   "method": "static_k",
+   "param": 5,
+   "prune": 0.0
+  }
+ },
+ "iforest/s1": {
+  "0": {
+   "span": 60,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 10,
+   "method": "static_k",
+   "param": 5,
+   "prune": 0.0
+  }
+ },
+ "iforest/s2": {
+  "0": {
+   "span": 60,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 10,
+   "method": "static_k",
+   "param": 5,
+   "prune": 0.0
+  }
+ }
+}
