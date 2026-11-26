@@ -21,11 +21,14 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit", type=int)
     ap.add_argument("--threads", type=int, default=2)
+    ap.add_argument("--shard", default="0/1", help="i/n: process every n-th channel starting at i")
     a = ap.parse_args()
     torch.set_num_threads(a.threads)
     out = SCORES / a.model / f"s{a.seed}"
     out.mkdir(parents=True, exist_ok=True)
     chans = load_labels().chan_id.tolist()[: a.limit]
+    i, n = map(int, a.shard.split("/"))
+    chans = chans[i::n]
     t0 = time.time()
     for i, c in enumerate(chans):
         f = out / f"{c}.npz"

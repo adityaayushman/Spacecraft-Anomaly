@@ -20,7 +20,10 @@ import matplotlib.pyplot as plt
 
 from .data import fold_assignment, load_labels
 from .detect import Config, detect, ewma
-from .evaluate import MODEL_ORDER, OUT, SEEDS, load_scores
+from .evaluate import MAIN_MODELS, OUT, VARIANTS, count_table, crossfit, load_scores
+from .detect import grid
+
+MODEL_ORDER = MAIN_MODELS + VARIANTS
 from .metrics import overlap, to_mask
 
 SPAN = 30
@@ -71,7 +74,7 @@ def breakdown(df):
 
 def fig_models():
     main = pd.read_csv(OUT / "main_results.csv")
-    order = [m for m in MODEL_ORDER if m in set(main.model)]
+    order = [m for m in MAIN_MODELS if m in set(main.model)]
     g = main.groupby("model")[["f1", "pa_f1", "pt_f1"]].agg(["mean", "std"]).loc[order].fillna(0)
     fig, ax = plt.subplots(figsize=(9, 4))
     x, w = np.arange(len(order)), 0.27
@@ -88,7 +91,7 @@ def fig_models():
 
 
 def fig_ceiling(df):
-    order = [m for m in MODEL_ORDER if m in set(df.model)]
+    order = [m for m in MAIN_MODELS if m in set(df.model)]
     g = df.groupby("model")[["detected", "sep_max", "sep_p99"]].mean().loc[order]
     fig, ax = plt.subplots(figsize=(9, 4))
     x, w = np.arange(len(order)), 0.27
@@ -108,7 +111,7 @@ def fig_ceiling(df):
 
 def fig_examples(df):
     main = pd.read_csv(OUT / "main_results.csv")
-    best = main.groupby("model").f1.mean().idxmax()
+    best = main[main.model.isin(MAIN_MODELS)].groupby("model").f1.mean().idxmax()
     d = df[df.model == best]
     pick = pd.concat([d[d.detected].sample(2, random_state=1), d[~d.detected].sample(2, random_state=1)])
     labels = load_labels().set_index("chan_id")
@@ -127,10 +130,40 @@ def fig_examples(df):
     fig.savefig(OUT / "fig_examples.png", dpi=140)
 
 
+def span_ablation(models=("persistence", "moving_avg", "gru", "lstm", "cnn")):
+    """Does slower smoothing (spans up to 500) help with contextual anomalies?"""
+    labels = load_labels()
+    folds = fold_assignment(labels)
+    rows = []
+    for model in models:
+        scores = load_scores(model, 0)
+        for tag, spans in (("spans 10-60 (main)", (10, 30, 60)), ("spans 10-500", (10, 30, 60, 200, 500))):
+            cfgs = grid(spans)
+            table = count_table(scores, labels, cfgs)
+            _, chosen = crossfit(table, cfgs, folds)
+            det = {"point": [], "contextual": []}
+            tp = fp = fn = 0
+            for _, r in labels.iterrows():
+                test, cal = scores[r.chan_id]
+                pred = detect(test, cal, chosen[1 - folds[r.chan_id]])
+                fp += sum(not any(overlap(p, t) for t in r.seqs) for p in pred)
+                for t, cls in zip(r.seqs, r.classes):
+                    hit = any(overlap(p, t) for p in pred)
+                    det[cls].append(hit)
+                    tp, fn = tp + hit, fn + (not hit)
+            prec, rec = tp / max(tp + fp, 1), tp / (tp + fn)
+            rows.append(f"| {model} | {tag} | {2 * prec * rec / max(prec + rec, 1e-9):.3f} | {prec:.2f} | {rec:.2f} | "
+                        f"{np.mean(det['point']):.2f} | {np.mean(det['contextual']):.2f} |")
+    head = ["| model | smoothing grid | strict F1 | precision | recall | point recall | contextual recall |",
+            "|---|---|---|---|---|---|---|"]
+    (OUT / "span_ablation.md").write_text("\n".join(head + rows) + "\n")
+    print("\n".join(head + rows))
+
+
 if __name__ == "__main__":
     df = anomaly_detail()
     breakdown(df)
     fig_models()
     fig_ceiling(df)
     fig_examples(df)
-    print((OUT / "error_analysis.md").read_text())
+    span_ablation()

@@ -117,18 +117,24 @@ class _CNN(nn.Module):
 
 
 class Forecaster:
-    def __init__(self, arch):
-        self.arch, self.name = arch, arch
+    """Next-step forecaster. hidden / w (context length) / cmd (use command features) are
+    exposed for the sensitivity study; defaults reproduce the main-table models."""
+
+    def __init__(self, arch, hidden=64, w=W, cmd=True):
+        self.arch, self.hidden, self.w, self.cmd = arch, hidden, w, cmd
+
+    def _x(self, x):
+        return x if self.cmd else x[:, :1]
 
     def _net(self, f):
-        return {"lstm": lambda: _LSTM(f, cell=nn.LSTM),
-                "gru": lambda: _LSTM(f, cell=nn.GRU),
+        return {"lstm": lambda: _LSTM(f, h=self.hidden, cell=nn.LSTM),
+                "gru": lambda: _LSTM(f, h=self.hidden, cell=nn.GRU),
                 "cnn": lambda: _CNN(f)}[self.arch]()
 
     def fit(self, fit_x, es_x, seed=0, epochs=15, patience=3):
         torch.manual_seed(seed)
-        X, y = map(torch.from_numpy, windows(fit_x, W, stride=2))
-        Xv, yv = map(torch.from_numpy, windows(es_x, W, stride=2))
+        X, y = map(torch.from_numpy, windows(self._x(fit_x), self.w, stride=2))
+        Xv, yv = map(torch.from_numpy, windows(self._x(es_x), self.w, stride=2))
         net = self._net(X.shape[2])
         opt = torch.optim.Adam(net.parameters(), 1e-3)
         best, state, bad = 1e9, None, 0
@@ -153,9 +159,9 @@ class Forecaster:
 
     @torch.no_grad()
     def score(self, x):
-        X, y = windows(x, W)
+        X, y = windows(self._x(x), self.w)
         pred = torch.cat([self.net(torch.from_numpy(b)) for b in np.array_split(X, max(1, len(X) // 1024))])
-        return _pad(np.abs(pred.numpy() - y), W, len(x))
+        return _pad(np.abs(pred.numpy() - y), self.w, len(x))
 
 
 # ------------------------------------------------------------------ LSTM autoencoder
@@ -222,6 +228,10 @@ MODELS = {
     "persistence": Persistence, "moving_avg": MovingAverage, "ridge_ar": RidgeAR,
     "iforest": IForest, "lstm": lambda: Forecaster("lstm"), "gru": lambda: Forecaster("gru"),
     "cnn": lambda: Forecaster("cnn"), "lstm_ae": LSTMAutoencoder,
+    # sensitivity variants of the GRU (not part of the main table)
+    "gru_h32": lambda: Forecaster("gru", hidden=32), "gru_h128": lambda: Forecaster("gru", hidden=128),
+    "gru_w50": lambda: Forecaster("gru", w=50), "gru_w200": lambda: Forecaster("gru", w=200),
+    "gru_nocmd": lambda: Forecaster("gru", cmd=False),
 }
 
 
@@ -233,6 +243,8 @@ def run_channel(name, train, test, seed=0):
     """
     n = len(train)
     a, b = int(0.8 * n), int(0.9 * n)
-    m = MODELS[name]().fit(train[:a], train[a - W:b], seed=seed)
+    m = MODELS[name]()
+    w = getattr(m, "w", W)
+    m.fit(train[:a], train[a - w:b], seed=seed)
     cal = m.score(train)[b:]
     return m.score(test), cal

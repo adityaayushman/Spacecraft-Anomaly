@@ -18,9 +18,9 @@ class Config:
         return f"{self.method}(span={self.span},param={self.param},prune={self.prune})"
 
 
-def grid():
+def grid(spans=(10, 30, 60)):
     out = []
-    for span in (10, 30, 60):
+    for span in spans:
         out += [Config(span, "static_k", k) for k in (3, 5, 8, 12, 20)]
         out += [Config(span, "static_max", m) for m in (1.0, 1.2, 1.5, 2.0)]
         out += [Config(span, "dynamic", 0.0, p) for p in (0.0, 0.13)]
