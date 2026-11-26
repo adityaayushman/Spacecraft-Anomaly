@@ -72,3 +72,40 @@ def test_static_k_uses_calibration_only():
     test[100] = 50
     assert detect(test, cal, Config(1, "static_k", 8)) != []
     assert detect(np.zeros(300), cal, Config(1, "static_k", 8)) == []
+
+
+# ---------------------------------------------------------------- evaluation protocol
+def test_folds_are_disjoint_stratified_and_seeded():
+    from sad.data import fold_assignment
+    df = load_labels()
+    f0, f0b, f1 = fold_assignment(df, 0), fold_assignment(df, 0), fold_assignment(df, 1)
+    assert f0 == f0b and f0 != f1 and set(f0) == set(df.chan_id)
+    for sc, g in df.groupby("spacecraft"):
+        n0 = sum(f0[c] == 0 for c in g.chan_id)
+        assert abs(n0 - (len(g) - n0)) <= 1          # balanced within each spacecraft
+
+
+def test_f1_from_counts_matches_prf():
+    from sad.evaluate import f1_from_counts
+    c = np.array([[3, 1, 2], [0, 0, 0], [5, 5, 0]])
+    for row in c:
+        assert abs(f1_from_counts(row) - prf(*row)[2]) < 1e-12
+    assert f1_from_counts(c).shape == (3,)
+
+
+def test_crossfit_never_scores_a_config_on_its_tuning_fold():
+    """Config chosen on fold f must only be applied to channels of the other fold."""
+    from sad.evaluate import crossfit
+    cfgs = [Config(1, "static_k", 3), Config(1, "static_k", 5)]
+    chans = ["a", "b", "c", "d"]
+    folds = {"a": 0, "b": 0, "c": 1, "d": 1}
+    def row(tp, fp, fn):
+        return dict(tp=tp, fp=fp, fn=fn, pa_tp=0, pa_fp=0, pa_fn=0, pt_tp=0, pt_fp=0, pt_fn=0,
+                    normal_steps=100, delays=[])
+    # cfg0 is best on fold 0 (a, b); cfg1 is best on fold 1 (c, d)
+    table = {cfgs[0]: {"a": row(5, 0, 0), "b": row(5, 0, 0), "c": row(0, 0, 5), "d": row(0, 0, 5)},
+             cfgs[1]: {"a": row(0, 0, 5), "b": row(0, 0, 5), "c": row(5, 0, 0), "d": row(5, 0, 0)}}
+    rows, chosen = crossfit(table, cfgs, folds)
+    assert chosen[0] == cfgs[0] and chosen[1] == cfgs[1]
+    # fold-0 channels are scored with the config tuned on fold 1, and vice versa
+    assert rows["a"] == table[cfgs[1]]["a"] and rows["c"] == table[cfgs[0]]["c"]
