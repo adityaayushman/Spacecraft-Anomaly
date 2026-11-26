@@ -1,0 +1,478 @@
+<title>Telemetry Observatory</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout concept: a 3D stage (eight telemetry lanes, time left to right) beside a quiet instrument panel.
+   Teal = expert-labeled anomaly caught, red = missed, amber = false alarm; blue-violet ridge = model surprise. */
+:root {
+  --bg: #f2f4f9; --panel: #ffffff; --ink: #121a2e; --muted: #56627e; --line: #d9dfec; --accent: #2f5bd8; --accent-ink: #ffffff;
+  --chip: #eaeef7;
+  --s-bg: #eef1f8; --s-grid: #c9d1e3; --s-lane: #dde3f1; --s-tele: #26324f;
+  --s-lo: #7b8cc4; --s-mid: #e0a43a; --s-hi: #d4382c;
+  --s-hit: #12877a; --s-miss: #d4382c; --s-fa: #c97f08; --s-text: #121a2e; --s-sweep: #2f5bd8;
+  --f-head: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0f1c; --panel: #111a2d; --ink: #e7ecf7; --muted: #93a0bd; --line: #223049; --accent: #7ea2ff; --accent-ink: #0a0f1c;
+    --chip: #1a2539;
+    --s-bg: #0b1120; --s-grid: #1c2740; --s-lane: #111a2e; --s-tele: #cfe0ff;
+    --s-lo: #5b6fb5; --s-mid: #f0b64a; --s-hi: #ff6a5c;
+    --s-hit: #35d0b4; --s-miss: #ff6a5c; --s-fa: #f0b64a; --s-text: #e7ecf7; --s-sweep: #7ea2ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a0f1c; --panel: #111a2d; --ink: #e7ecf7; --muted: #93a0bd; --line: #223049; --accent: #7ea2ff; --accent-ink: #0a0f1c;
+  --chip: #1a2539;
+  --s-bg: #0b1120; --s-grid: #1c2740; --s-lane: #111a2e; --s-tele: #cfe0ff;
+  --s-lo: #5b6fb5; --s-mid: #f0b64a; --s-hi: #ff6a5c;
+  --s-hit: #35d0b4; --s-miss: #ff6a5c; --s-fa: #f0b64a; --s-text: #e7ecf7; --s-sweep: #7ea2ff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 28px; }
+.app { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1, h2, h3 { font-family: var(--f-head); margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.08; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-family: var(--f-body); }
+p { margin: 0; }
+.top { display: flex; flex-wrap: wrap; gap: 14px 32px; align-items: flex-end; justify-content: space-between; }
+.top .lead { max-width: 62ch; color: var(--muted); margin-top: 8px; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.seg { display: inline-flex; background: var(--chip); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button, .btn { font: inherit; font-size: 12.5px; font-weight: 500; color: var(--ink); background: transparent; border: 0; border-radius: 6px; padding: 6px 11px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel); box-shadow: 0 0 0 1px var(--line); }
+.btn { background: var(--accent); color: var(--accent-ink); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggles { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
+.toggles label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.toggles input { accent-color: var(--accent); }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.stage { position: relative; background: var(--s-bg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; height: clamp(420px, 68vh, 680px); }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.legend { position: absolute; left: 12px; top: 12px; display: flex; flex-wrap: wrap; gap: 6px 12px; max-width: calc(100% - 24px); font-size: 11.5px; color: var(--muted);
+  background: color-mix(in srgb, var(--s-bg) 82%, transparent); padding: 6px 10px; border-radius: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.sw.hit { background: var(--s-hit); } .sw.miss { background: transparent; border: 2px solid var(--s-miss); }
+.sw.fa { background: var(--s-fa); border-radius: 50%; } .sw.ridge { background: linear-gradient(90deg, var(--s-lo), var(--s-mid), var(--s-hi)); width: 22px; }
+.sw.tele { height: 2px; background: var(--s-tele); width: 18px; border-radius: 0; }
+.hud { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 12px; align-items: center;
+  background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.hud input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.hud output { font-family: var(--f-mono); font-size: 12px; min-width: 7.5ch; text-align: right; color: var(--muted); }
+.fallback[hidden] { display: none; }
+.fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+.panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.chlist { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.chbtn { font: inherit; text-align: left; background: var(--chip); color: var(--ink); border: 1px solid transparent; border-radius: 8px; padding: 7px 9px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.chbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--panel); }
+.chbtn b { font-family: var(--f-mono); font-weight: 500; font-size: 13px; display: flex; justify-content: space-between; }
+.chbtn small { color: var(--muted); font-size: 11px; }
+.pips { display: flex; gap: 3px; }
+.pip { width: 11px; height: 11px; border-radius: 3px; background: var(--s-hit); }
+.pip.miss { background: transparent; border: 2px solid var(--s-miss); }
+.facts { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.facts li { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; font-size: 13px; border-top: 1px solid var(--line); padding-top: 6px; }
+.facts li:first-child { border-top: 0; padding-top: 0; }
+.tag { font-family: var(--f-mono); font-size: 11.5px; padding: 1px 7px; border-radius: 99px; background: var(--chip); white-space: nowrap; }
+.tag.hit { color: var(--s-hit); } .tag.miss { color: var(--s-miss); } .tag.fa { color: var(--s-fa); }
+.muted { color: var(--muted); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.counts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: left; }
+.counts div { background: var(--chip); border-radius: 8px; padding: 6px 8px; }
+.counts b { display: block; font-family: var(--f-head); font-size: 20px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.counts span { font-size: 11px; color: var(--muted); }
+.feed { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow: auto; font-size: 12.5px; }
+.feed li { display: flex; gap: 8px; justify-content: space-between; }
+.bars { display: flex; flex-direction: column; gap: 7px; }
+.bar { display: grid; grid-template-columns: 92px minmax(0, 1fr) 46px; gap: 8px; align-items: center; font-size: 12.5px; }
+.bar .name { font-family: var(--f-mono); font-size: 12px; }
+.track { position: relative; height: 14px; background: var(--chip); border-radius: 4px; }
+.fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 4px; opacity: 0.85; }
+.whisker { position: absolute; top: 6px; height: 2px; background: var(--ink); opacity: 0.7; }
+.whisker::before, .whisker::after { content: ""; position: absolute; top: -3px; width: 2px; height: 8px; background: var(--ink); }
+.whisker::before { left: 0; } .whisker::after { right: 0; }
+.bar .val { text-align: right; font-family: var(--f-mono); font-size: 12px; }
+.note { font-size: 12px; color: var(--muted); }
+footer { font-size: 12px; color: var(--muted); max-width: 110ch; }
+footer a { color: var(--accent); }
+@media (max-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr); } .stage { height: clamp(380px, 62vh, 560px); } }
+@media (max-width: 520px) { .bar { grid-template-columns: 78px minmax(0, 1fr) 42px; } .counts { grid-template-columns: repeat(2, 1fr); } .hud { gap: 8px; padding: 6px 8px; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Telemetry Observatory</h1>
+      <p class="lead">Eight real channels from NASA's SMAP satellite and Curiosity rover. A GRU learns each channel's normal behavior; the colored ridge shows how far the live value strays from its forecast, scaled so 1.0 is the alarm line.</p>
+    </div>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Camera">
+        <button type="button" data-cam="overview" aria-pressed="true">Overview</button>
+        <button type="button" data-cam="front" aria-pressed="false">Front</button>
+        <button type="button" data-cam="top" aria-pressed="false">Top</button>
+      </div>
+      <div class="toggles" role="group" aria-label="Layers">
+        <label><input type="checkbox" id="l-tele" checked> Telemetry</label>
+        <label><input type="checkbox" id="l-score" checked> Surprise ridge</label>
+        <label><input type="checkbox" id="l-labels" checked> Expert labels</label>
+        <label><input type="checkbox" id="l-preds" checked> Alerts</label>
+      </div>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="stage" id="stage" aria-label="3D view of eight spacecraft telemetry channels. Time runs left to right, one lane per channel.">
+      <canvas id="gl"></canvas>
+      <div class="legend" aria-hidden="true">
+        <span><i class="sw tele"></i>telemetry</span>
+        <span><i class="sw ridge"></i>surprise (1.0 = alarm)</span>
+        <span><i class="sw hit"></i>labeled, caught</span>
+        <span><i class="sw miss"></i>labeled, missed</span>
+        <span><i class="sw fa"></i>false alarm</span>
+      </div>
+      <div class="hud">
+        <button type="button" class="btn" id="play">Replay scan</button>
+        <input type="range" id="t" min="0" max="1000" value="1000" aria-label="Scan position in time">
+        <output id="tout" for="t">100%</output>
+      </div>
+      <div class="fallback" id="fallback" hidden>WebGL is not available in this browser, so the 3D view cannot draw. The channel details and scoreboard still work.</div>
+    </section>
+
+    <aside class="panel">
+      <div class="card">
+        <h2>Channels · click a lane or pick one</h2>
+        <div class="chlist" id="chlist"></div>
+      </div>
+      <div class="card" id="detail"></div>
+      <div class="card">
+        <h2>Scan results up to the cursor</h2>
+        <div class="counts">
+          <div><b id="c-pass">0</b><span>labeled passed</span></div>
+          <div><b id="c-hit">0</b><span>caught</span></div>
+          <div><b id="c-miss">0</b><span>missed</span></div>
+          <div><b id="c-fa">0</b><span>false alarms</span></div>
+        </div>
+        <ul class="feed" id="feed" aria-live="off"></ul>
+      </div>
+      <div class="card">
+        <h2>How eight detectors score</h2>
+        <div class="seg" role="group" aria-label="Scoring protocol" id="proto">
+          <button type="button" data-p="f1" aria-pressed="true">Strict</button>
+          <button type="button" data-p="pa" aria-pressed="false">Point-adjusted</button>
+          <button type="button" data-p="pt" aria-pressed="false">Point-wise</button>
+        </div>
+        <div class="bars" id="bars"></div>
+        <p class="note" id="protonote"></p>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    Data: expert-labeled SMAP and MSL telemetry from NASA JPL (Hundman et al., KDD 2018). Alerts above come from the GRU (seed 0), with thresholds tuned on the other half of the channels. The scoreboard is cross-fitted over 81 channels and five random fold splits; whiskers are 95% channel-bootstrap intervals for strict F1. Source of the numbers: <span class="mono">results/summary.md</span> in the
+    <a href="https://github.com/adityaayushman/Spacecraft-Anomaly" target="_blank" rel="noopener">project repository</a>.
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const DATA = /*__DATA__*/null;
+const MODELS = [
+  { n: "moving_avg", f1: .673, lo: .57, hi: .77, pa: .818, pt: .110 },
+  { n: "persistence", f1: .595, lo: .51, hi: .71, pa: .835, pt: .074 },
+  { n: "gru", f1: .594, lo: .51, hi: .68, pa: .638, pt: .281 },
+  { n: "ridge_ar", f1: .552, lo: .48, hi: .64, pa: .646, pt: .185 },
+  { n: "lstm_ae", f1: .518, lo: .43, hi: .61, pa: .483, pt: .361 },
+  { n: "lstm", f1: .512, lo: .42, hi: .61, pa: .565, pt: .304 },
+  { n: "cnn", f1: .471, lo: .37, hi: .60, pa: .615, pt: .274 },
+  { n: "iforest", f1: .286, lo: .21, hi: .37, pa: .298, pt: .173 },
+];
+const NOTES = {
+  f1: "Strict sequence F1: a labeled anomaly counts as caught if any alert overlaps it. Whiskers show the 95% interval; most models overlap each other.",
+  pa: "Point-adjusted F1 credits a whole labeled span for one hit. Persistence jumps to 0.84 here without detecting anything better.",
+  pt: "Point-wise F1 counts every timestep. Persistence falls to 0.07: its alerts barely cover the labeled spans.",
+};
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $ = (s) => document.querySelector(s);
+const CH = DATA.channels, L = CH.length, N = DATA.bins;
+const W = 60, SP = 7.2, HT = 3.0, K = 1.1, CAP = 3.0;
+const xOf = (b) => -W / 2 + (b / (N - 1)) * W;
+const zOf = (i) => (i - (L - 1) / 2) * SP;
+const pct = (v) => Math.round(v * 100) + "%";
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const tok = () => Object.fromEntries(["s-bg","s-grid","s-lane","s-tele","s-lo","s-mid","s-hi","s-hit","s-miss","s-fa","s-text","s-sweep"].map(k => [k, new THREE.Color(css("--" + k))]));
+
+let renderer, scene, camera, controls, T, lanes = [], sweep = null, goal = null, focus = -1, tPos = 1, playing = false, lastTs = 0;
+const layerOn = { tele: true, score: true, labels: true, preds: true };
+
+/* ------------------------------------------------------------ scene */
+function label(text, sub, color) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 128;
+  const g = c.getContext("2d"); g.textBaseline = "middle";
+  g.fillStyle = "#" + color.getHexString();
+  g.font = "600 56px 'JetBrains Mono', monospace"; g.fillText(text, 8, 48);
+  if (sub) { g.globalAlpha = 0.65; g.font = "400 34px Inter, sans-serif"; g.fillText(sub, 10, 100); }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+  s.scale.set(7, 1.75, 1); return s;
+}
+function mat(Cls, color, opacity, extra) {
+  const m = new Cls(Object.assign({ color, transparent: true, opacity }, extra || {}));
+  m.userData.base = opacity; return m;
+}
+function ridgeColor(r) {
+  const c = new THREE.Color();
+  if (r <= 1) return c.copy(T["s-lo"]).lerp(T["s-mid"], Math.pow(Math.max(0, r), 2.2));
+  return c.copy(T["s-mid"]).lerp(T["s-hi"], Math.min(1, (r - 1) / 1.5));
+}
+function buildLane(ch, i) {
+  const g = new THREE.Group(), z = zOf(i);
+  g.userData.layers = {};
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(W + 4, 5.8), mat(THREE.MeshBasicMaterial, T["s-lane"], 0.85, { side: THREE.DoubleSide }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0.01, z); floor.userData.lane = i; g.add(floor);
+  g.userData.floor = floor;
+  const name = label(ch.id, ch.sc, T["s-text"]); name.position.set(-W / 2 - 5.2, 0.9, z); g.add(name);
+
+  const tele = new THREE.Group();
+  const pts = ch.tele.map((v, b) => new THREE.Vector3(xOf(b), 0.5 + HT * v, z - 1.9));
+  tele.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat(THREE.LineBasicMaterial, T["s-tele"], 0.95)));
+  g.add(tele); g.userData.layers.tele = tele;
+
+  const score = new THREE.Group();
+  const zA = z + 0.1, zB = z + 1.9, pos = [], col = [], idx = [];
+  const addV = (x, y, zz, c) => { pos.push(x, y, zz); col.push(c.r, c.g, c.b); };
+  ch.score.forEach((r, b) => {
+    const h = Math.min(r, CAP) * K, x = xOf(b), c = ridgeColor(r);
+    addV(x, h, zA, c); addV(x, h, zB, c);            // top surface (vertices 4b, 4b+1)
+    addV(x, 0, zB, c); addV(x, h, zB, c);            // front wall   (vertices 4b+2, 4b+3)
+  });
+  for (let b = 0; b < N - 1; b++) {
+    const a = b * 4, n = a + 4;
+    idx.push(a, a + 1, n, a + 1, n + 1, n, a + 2, a + 3, n + 2, a + 3, n + 3, n + 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  score.add(new THREE.Mesh(geo, mat(THREE.MeshBasicMaterial, 0xffffff, 0.92, { vertexColors: true, side: THREE.DoubleSide })));
+  [zA, zB].forEach((zz) => {
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-W / 2, K, zz), new THREE.Vector3(W / 2, K, zz)]),
+      mat(THREE.LineDashedMaterial, T["s-text"], 0.5, { dashSize: 0.5, gapSize: 0.4 }));
+    l.computeLineDistances(); score.add(l);
+  });
+  g.add(score); g.userData.layers.score = score;
+
+  const labels = new THREE.Group();
+  ch.labels.forEach((lb) => {
+    const x0 = xOf(lb.a), x1 = Math.max(xOf(lb.b), x0 + 0.3), col = lb.hit ? T["s-hit"] : T["s-miss"];
+    const geoB = new THREE.BoxGeometry(x1 - x0, 3.9, 5.2);
+    const box = new THREE.Mesh(geoB, mat(THREE.MeshBasicMaterial, col, lb.hit ? 0.16 : 0.1, { depthWrite: false }));
+    box.position.set((x0 + x1) / 2, 1.95, z);
+    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geoB), mat(THREE.LineBasicMaterial, col, 0.95));
+    edge.position.copy(box.position);
+    labels.add(box, edge);
+  });
+  g.add(labels); g.userData.layers.labels = labels;
+
+  const preds = new THREE.Group();
+  ch.pred.forEach((p) => {
+    const x0 = xOf(p.a), x1 = Math.max(xOf(p.b), x0 + 0.35), col = p.fp ? T["s-fa"] : T["s-hit"];
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.22, 0.7), mat(THREE.MeshBasicMaterial, col, 1));
+    bar.position.set((x0 + x1) / 2, 4.35, z + 0.9);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.9, 6), mat(THREE.MeshBasicMaterial, col, 0.8));
+    stem.position.set((x0 + x1) / 2, 2.9, z + 0.9);
+    preds.add(bar, stem);
+  });
+  g.add(preds); g.userData.layers.preds = preds;
+  return g;
+}
+function disposeScene() {
+  if (!scene) return;
+  scene.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+  });
+}
+function build() {
+  disposeScene();
+  T = tok();
+  scene = new THREE.Scene(); scene.background = T["s-bg"];
+  const grid = new THREE.GridHelper(76, 38, T["s-grid"], T["s-grid"]);
+  grid.position.y = -0.02; grid.material.transparent = true; grid.material.opacity = 0.55; scene.add(grid);
+  lanes = CH.map((ch, i) => { const g = buildLane(ch, i); scene.add(g); return g; });
+  ["0%", "50%", "100%"].forEach((t, k) => {
+    const s = label(t, "", T["s-text"]); s.scale.set(3.5, 0.9, 1);
+    s.position.set(-W / 2 + k * W / 2 + 1.2, 0.5, zOf(L - 1) + 4.6); s.material.opacity = 0.7; scene.add(s);
+  });
+  const depth = L * SP;
+  sweep = new THREE.Group();
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(depth, 6), mat(THREE.MeshBasicMaterial, T["s-sweep"], 0.14, { side: THREE.DoubleSide, depthWrite: false }));
+  plane.rotation.y = Math.PI / 2; plane.position.y = 3;
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(plane.geometry), mat(THREE.LineBasicMaterial, T["s-sweep"], 0.9));
+  edge.rotation.copy(plane.rotation); edge.position.copy(plane.position);
+  sweep.add(plane, edge); scene.add(sweep);
+  applyLayers(); applyFocus(); updateSweep();
+}
+function applyLayers() { lanes.forEach((g) => Object.keys(layerOn).forEach((k) => (g.userData.layers[k].visible = layerOn[k]))); }
+function applyFocus() {
+  lanes.forEach((g, i) => {
+    const k = focus < 0 || focus === i ? 1 : 0.22;
+    g.traverse((o) => { if (o.material && o.material.userData.base !== undefined) o.material.opacity = o.material.userData.base * k; });
+    g.userData.floor.material.opacity = (focus === i ? 1 : 0.85) * (focus < 0 || focus === i ? 1 : 0.4);
+  });
+}
+function updateSweep() {
+  const x = xOf((N - 1) * tPos);
+  sweep.position.x = x; sweep.visible = tPos > 0.003 && tPos < 0.997;
+}
+
+/* ------------------------------------------------------------ camera */
+const POSES = {
+  overview: [new THREE.Vector3(-52, 42, 70), new THREE.Vector3(0, 0, 9)],
+  front: [new THREE.Vector3(0, 12, 70), new THREE.Vector3(0, 1.5, 4)],
+  top: [new THREE.Vector3(0, 100, 0.01), new THREE.Vector3(0, 0, 0)],
+};
+function aspectScale() {                       // narrow screens need the camera further back
+  const a = camera ? camera.aspect : 1.5;
+  return a >= 1.4 ? 1 : 1 + (1.4 - a) * 0.6;
+}
+function scaled(pos, target) { return target.clone().add(pos.clone().sub(target).multiplyScalar(aspectScale())); }
+function fly(pos, target) {
+  if (reduced) { camera.position.copy(pos); controls.target.copy(target); goal = null; return; }
+  goal = { pos, target };
+}
+function camPreset(k) {
+  document.querySelectorAll("[data-cam]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.cam === k)));
+  setFocus(-1, true); fly(scaled(POSES[k][0], POSES[k][1]), POSES[k][1].clone());
+}
+function setFocus(i, keepCam) {
+  focus = i; applyFocus(); renderChannelUI();
+  if (i >= 0 && !keepCam) {
+    document.querySelectorAll("[data-cam]").forEach((b) => b.setAttribute("aria-pressed", "false"));
+    fly(scaled(new THREE.Vector3(-14, 10, zOf(i) + 17), new THREE.Vector3(0, 1.6, zOf(i))), new THREE.Vector3(0, 1.6, zOf(i)));
+  }
+}
+
+/* ------------------------------------------------------------ panel */
+function stat(ch) {
+  const caught = ch.labels.filter((l) => l.hit).length, fa = ch.pred.filter((p) => p.fp).length;
+  return { caught, total: ch.labels.length, fa };
+}
+function renderList() {
+  $("#chlist").innerHTML = CH.map((ch, i) => {
+    const s = stat(ch);
+    return `<button type="button" class="chbtn" data-i="${i}" aria-pressed="false"><b>${ch.id}<span class="muted">${ch.sc}</span></b>
+      <span class="pips" aria-hidden="true">${ch.labels.map((l) => `<i class="pip${l.hit ? "" : " miss"}"></i>`).join("")}</span>
+      <small>${s.caught} of ${s.total} caught${s.fa ? ` · ${s.fa} false` : ""}</small></button>`;
+  }).join("");
+  document.querySelectorAll(".chbtn").forEach((b) => b.addEventListener("click", () => setFocus(focus === +b.dataset.i ? -1 : +b.dataset.i)));
+}
+function renderChannelUI() {
+  document.querySelectorAll(".chbtn").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.i === focus)));
+  const d = $("#detail");
+  if (focus < 0) {
+    const tot = CH.reduce((a, ch) => { const s = stat(ch); return [a[0] + s.caught, a[1] + s.total, a[2] + s.fa]; }, [0, 0, 0]);
+    d.innerHTML = `<h2>All eight channels</h2><p>The GRU caught <b>${tot[0]} of ${tot[1]}</b> labeled anomalies here and raised <b>${tot[2]}</b> false alarms. Pick a channel to see its anomalies and alerts.</p>
+      <p class="note">These eight were chosen to show both outcomes, so this is not the GRU's overall hit rate: across all 81 channels its recall is 0.56. Point anomalies (a sharp excursion) are usually caught; contextual ones (normal-looking values at the wrong moment) usually are not.</p>`;
+    return;
+  }
+  const ch = CH[focus], s = stat(ch);
+  d.innerHTML = `<h2>${ch.id} · ${ch.sc} · ${ch.n.toLocaleString()} test steps</h2>
+    <ul class="facts">${ch.labels.map((l) => `<li><span>${cap(l.cls)} anomaly<br><span class="muted mono">steps ${l.a_s.toLocaleString()}–${l.b_s.toLocaleString()}</span></span><span class="tag ${l.hit ? "hit" : "miss"}">${l.hit ? "caught" : "missed"}</span></li>`).join("")}
+    ${ch.pred.filter((p) => p.fp).map((p) => `<li><span>Alert with no label<br><span class="muted mono">steps ${p.a_s.toLocaleString()}–${p.b_s.toLocaleString()}</span></span><span class="tag fa">false alarm</span></li>`).join("")}</ul>
+    <p class="note">Peak surprise ${Math.max(...ch.score).toFixed(2)}× the alarm line. Threshold: <span class="mono">${ch.cfg}</span></p>`;
+}
+function renderScan() {
+  const bin = (N - 1) * tPos;
+  let pass = 0, hit = 0, miss = 0, fa = 0; const feed = [];
+  CH.forEach((ch) => {
+    ch.labels.forEach((l) => { if (l.b <= bin) { pass++; l.hit ? hit++ : miss++; } });
+    ch.pred.forEach((p) => { if (p.a <= bin) { if (p.fp) fa++; feed.push({ bin: p.a, id: ch.id, step: p.a_s, fp: p.fp }); } });
+  });
+  $("#c-pass").textContent = pass; $("#c-hit").textContent = hit; $("#c-miss").textContent = miss; $("#c-fa").textContent = fa;
+  feed.sort((a, b) => b.bin - a.bin);
+  $("#feed").innerHTML = feed.length ? feed.slice(0, 12).map((f) =>
+    `<li><span class="mono">${f.id} · step ${f.step.toLocaleString()}</span><span class="tag ${f.fp ? "fa" : "hit"}">${f.fp ? "false alarm" : "confirmed"}</span></li>`).join("")
+    : `<li class="muted">No alerts yet.</li>`;
+  $("#tout").textContent = pct(tPos);
+}
+function renderBars(p) {
+  const rows = MODELS.slice().sort((a, b) => b[p] - a[p]);
+  $("#bars").innerHTML = rows.map((m) => `<div class="bar"><span class="name">${m.n}</span>
+    <span class="track"><span class="fill" style="width:${m[p] * 100}%"></span>${p === "f1" ? `<span class="whisker" style="left:${m.lo * 100}%;width:${(m.hi - m.lo) * 100}%"></span>` : ""}</span>
+    <span class="val">${m[p].toFixed(2)}</span></div>`).join("");
+  $("#protonote").textContent = NOTES[p];
+  document.querySelectorAll("#proto button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === p)));
+}
+
+/* ------------------------------------------------------------ loop & wiring */
+function setT(v) { tPos = Math.min(1, Math.max(0, v)); $("#t").value = Math.round(tPos * 1000); if (sweep) updateSweep(); renderScan(); }
+function tick(ts) {
+  requestAnimationFrame(tick);
+  if (playing) {
+    const dt = Math.min(0.05, (ts - lastTs) / 1000); setT(tPos + dt / 24);
+    if (tPos >= 1) { playing = false; $("#play").textContent = "Replay scan"; }
+  }
+  lastTs = ts;
+  if (!renderer) return;
+  if (goal) {
+    camera.position.lerp(goal.pos, 0.1); controls.target.lerp(goal.target, 0.1);
+    if (camera.position.distanceTo(goal.pos) < 0.2) goal = null;
+  }
+  controls.update(); renderer.render(scene, camera);
+}
+function resize() {
+  const s = $("#stage"), w = s.clientWidth, h = s.clientHeight;
+  if (!renderer || !w || !h) return;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+function init() {
+  renderList(); renderBars("f1"); renderChannelUI(); renderScan();
+  document.querySelectorAll("[data-cam]").forEach((b) => b.addEventListener("click", () => camPreset(b.dataset.cam)));
+  document.querySelectorAll("#proto button").forEach((b) => b.addEventListener("click", () => renderBars(b.dataset.p)));
+  [["tele", "l-tele"], ["score", "l-score"], ["labels", "l-labels"], ["preds", "l-preds"]].forEach(([k, id]) =>
+    $("#" + id).addEventListener("change", (e) => { layerOn[k] = e.target.checked; if (scene) applyLayers(); }));
+  $("#play").addEventListener("click", () => {
+    if (playing) { playing = false; $("#play").textContent = "Resume scan"; return; }
+    if (tPos >= 0.999) setT(0);
+    playing = true; $("#play").textContent = "Pause";
+  });
+  $("#t").addEventListener("input", (e) => { playing = false; $("#play").textContent = "Replay scan"; setT(e.target.value / 1000); });
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: $("#gl"), antialias: true });
+  } catch (e) { renderer = null; $("#fallback").hidden = false; requestAnimationFrame(tick); return; }
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 400);
+  camera.position.copy(POSES.overview[0]);
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.495;
+  controls.minDistance = 10; controls.maxDistance = 150; controls.target.copy(POSES.overview[1]);
+  controls.addEventListener("start", () => { goal = null; });
+  build(); resize();
+  camera.position.copy(scaled(POSES.overview[0], POSES.overview[1]));
+  new ResizeObserver(resize).observe($("#stage"));
+  const el = renderer.domElement; let down = null;
+  el.addEventListener("pointerdown", (e) => { down = [e.clientX, e.clientY]; });
+  el.addEventListener("pointerup", (e) => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return;
+    const r = el.getBoundingClientRect(), ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    const rc = new THREE.Raycaster(); rc.setFromCamera(ndc, camera);
+    const hit = rc.intersectObjects(lanes.map((g) => g.userData.floor))[0];
+    if (hit) setFocus(focus === hit.object.userData.lane ? -1 : hit.object.userData.lane);
+  });
+  const rebuild = () => { if (renderer) build(); };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rebuild);
+  new MutationObserver(rebuild).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  requestAnimationFrame(tick);
+}
+window.addEventListener("load", init);
+</script>
