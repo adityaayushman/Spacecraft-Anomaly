@@ -82,5 +82,173 @@
    "param": 5,
    "prune": 0.0
   }
+ },
+ "lstm_ae/s0": {
+  "0": {
+   "span": 10,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 8,
+   "prune": 0.0
+  }
+ },
+ "lstm_ae/s1": {
+  "0": {
+   "span": 30,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 8,
+   "prune": 0.0
+  }
+ },
+ "lstm_ae/s2": {
+  "0": {
+   "span": 10,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 12,
+   "prune": 0.0
+  }
+ },
+ "cnn/s0": {
+  "0": {
+   "span": 30,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 12,
+   "prune": 0.0
+  }
+ },
+ "cnn/s1": {
+  "0": {
+   "span": 60,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 30,
+   "method": "static_k",
+   "param": 12,
+   "prune": 0.0
+  }
+ },
+ "cnn/s2": {
+  "0": {
+   "span": 10,
+   "method": "static_k",
+   "param": 20,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 12,
+   "prune": 0.0
+  }
+ },
+ "gru/s0": {
+  "0": {
+   "span": 60,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 12,
+   "prune": 0.0
+  }
+ },
+ "gru/s1": {
+  "0": {
+   "span": 60,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 8,
+   "prune": 0.0
+  }
+ },
+ "gru/s2": {
+  "0": {
+   "span": 60,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 12,
+   "prune": 0.0
+  }
+ },
+ "lstm/s0": {
+  "0": {
+   "span": 30,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 8,
+   "prune": 0.0
+  }
+ },
+ "lstm/s1": {
+  "0": {
+   "span": 10,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 12,
+   "prune": 0.0
+  }
+ },
+ "lstm/s2": {
+  "0": {
+   "span": 60,
+   "method": "dynamic",
+   "param": 0.0,
+   "prune": 0.0
+  },
+  "1": {
+   "span": 60,
+   "method": "static_k",
+   "param": 8,
+   "prune": 0.0
+  }
  }
 }
