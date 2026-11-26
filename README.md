@@ -13,7 +13,8 @@ A benchmark study of whether LSTM-style models actually beat simple baselines at
 3. **Point anomalies are caught; contextual anomalies mostly are not.** For most models, recall on the 62 point anomalies is ~0.63–0.85 but only ~0.09–0.35 on the 43 contextual anomalies. Forecast error is largely blind to contextual anomalies.
 4. **The ceiling is mostly the score, not the threshold.** For contextual anomalies only 30–47% have a peak score above the highest score in normal data (a zero-false-positive threshold exists), so no threshold could catch most of the rest.
 5. **Slower smoothing is not a fix.** Allowing EWMA spans up to 500 changed contextual recall unpredictably (LSTM 0.19 → 0.37, GRU 0.28 → 0.33, moving average and CNN unchanged) and moved F1 by −0.06 to +0.07, within noise (single seed and fold split; `results/span_ablation.md`).
-6. **Tuning broadly over thresholds overfits.** Picking the best of all 33 threshold configurations on one fold generalized worse than fixing the dynamic (Hundman et al.) family for most models (e.g. GRU 0.59 vs 0.63), because each fold has only ~50 anomalies.
+6. **Model settings barely matter, but capacity may help contextual anomalies.** Hidden size, window length and removing command features all leave strict F1 within noise (0.55–0.63); the only visible pattern is contextual recall rising with hidden size (0.20 → 0.32 → 0.48), a lead for follow-up rather than a conclusion (see GRU sensitivity).
+7. **Tuning broadly over thresholds overfits.** Picking the best of all 33 threshold configurations on one fold generalized worse than fixing the dynamic (Hundman et al.) family for most models (e.g. GRU 0.59 vs 0.63), because each fold has only ~50 anomalies.
 
 ![models](results/fig_models.png)
 ![ceiling](results/fig_ceiling.png)
@@ -35,7 +36,23 @@ Mean ± std over seeds × 5 random fold splits; CI is a 95% channel-level bootst
 
 Deterministic baselines (persistence, moving average, ridge AR) have no seed variance, so their "runs" are the 5 fold splits only. Full tables (paired differences, false alarms per 10k steps, detection delay, threshold ablation) are in [`results/summary.md`](results/summary.md); per-class / length / spacecraft breakdowns with separability ceilings are in [`results/error_analysis.md`](results/error_analysis.md).
 
-<!-- SENSITIVITY -->
+## GRU sensitivity
+
+Does the GRU's result depend on its settings? Same protocol (cross-fitted, 5 fold splits); 2 seeds per variant, 1 for window 200 (it is ~7× slower to train). The reference GRU is restricted to the same seeds. Recall columns use fold split 0.
+
+| variant | strict F1 | 95% CI | reference GRU | point recall | contextual recall |
+|---|---|---|---|---|---|
+| hidden 32 | 0.552 ± 0.071 | [0.47, 0.64] | 0.596 | 0.77 | 0.20 |
+| hidden 64 (main GRU) | 0.596 ± 0.040 | [0.51, 0.68] | – | 0.78 | 0.32 |
+| hidden 128 | 0.632 ± 0.028 | [0.55, 0.71] | 0.596 | 0.70 | 0.48 |
+| window 50 | 0.609 ± 0.014 | [0.53, 0.68] | 0.596 | 0.75 | 0.27 |
+| window 200 | 0.614 ± 0.012 | [0.53, 0.69] | 0.582 | 0.76 | 0.21 |
+| no command features | 0.592 ± 0.040 | [0.51, 0.67] | 0.596 | 0.73 | 0.27 |
+
+- **Nothing changes strict F1 beyond noise.** All variants fall between 0.55 and 0.63, inside each other's confidence intervals.
+- **Command features do not help.** Dropping them leaves F1 unchanged (0.592 vs 0.596), so the model is not exploiting command context, which is one reason contextual anomalies (those that depend on context) stay hard.
+- **Window length (50 vs 100 vs 200) makes no visible difference.**
+- **A lead, not a result:** contextual recall rises with hidden size (32 → 64 → 128: 0.20 → 0.32 → 0.48, consistent across both seeds) while point recall dips slightly, and F1 moves only +0.04. This is one fold split and 43 contextual anomalies, so it needs hidden 256, more seeds and more splits before it can be called real.
 
 ## Method
 
@@ -53,7 +70,7 @@ Deterministic baselines (persistence, moving average, ridge AR) have no seed var
 - **Small sample.** 105 anomalies over 81 channels. Bootstrap CIs on strict F1 are roughly ±0.08–0.12 wide; differences of a few F1 points should not be over-read. The CIs resample channels with the tuned configs held fixed, so they understate tuning variance, which the ±std over fold splits partly captures.
 - **Strict scoring is lenient on long spans.** A labeled span can cover thousands of steps (e.g. A-8: ~3,800 of 8,400), so a stray alarm inside it counts as a detection. Point-wise F1 is far lower for every model.
 - **Benchmark label quality.** The SMAP/MSL labels have been criticized in the literature (e.g. Wu & Keogh, "Current Time Series Anomaly Detection Benchmarks are Flawed"); many anomalies are ambiguous, and some are easy enough for trivial baselines. Persistence and a moving average matching or beating deep models here is consistent with that critique, not evidence that LSTMs are useless in general.
-- **Neural models are not tuned per channel.** Network size, window and training schedule are fixed and shared; the sensitivity study above varies a few of them for the GRU only.
+- **Neural models are not tuned per channel.** Network size, window and training schedule are fixed and shared; the sensitivity study above varies hidden size, window and command features for the GRU only, with 1–2 seeds each.
 - **Dynamic thresholding uses test scores**, as in the original method; static variants use only the 10% clean calibration slice.
 - **Ceiling numbers use one smoothing span (30)**, so achieved recall can exceed the zero-FP ceiling for some models (it tolerates false positives and may use another span).
 - **No second dataset.** Transfer to the ESA anomaly benchmarks was out of reach (hosts unreachable from the build environment) and is the obvious next experiment.
