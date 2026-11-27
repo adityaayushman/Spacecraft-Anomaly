@@ -71,15 +71,29 @@ def to_sequences(mask, pad=PAD, merge_gap=MERGE_GAP):
     return [[max(0, a - pad), min(n - 1, b + pad)] for a, b in seqs]
 
 
-def prune(seqs, e, eps, p):
+def windowed_mask(e, batch=70, n_batches=30):
+    """Telemanom-style thresholding: scores are processed in batches of `batch` steps; each
+    batch is thresholded with a dynamic epsilon computed on the trailing window of
+    `n_batches` batches (batch_size 70, window_size 30 in the authors' config.yaml)."""
+    mask = np.zeros(len(e), dtype=bool)
+    for start in range(0, len(e), batch):
+        end = min(start + batch, len(e))
+        eps = dynamic_threshold(e[max(0, end - batch * n_batches):end])
+        mask[start:end] = e[start:end] > eps
+    return mask
+
+
+def prune(seqs, e, eps, p, normal_max=None):
     """Hundman et al. pruning: sort sequence peaks (plus the highest non-flagged
     value); keep sequences down to the last one whose peak is >= p (relative)
     above the next peak."""
     if not seqs or p <= 0:
         return seqs
     peaks = sorted(((e[a:b + 1].max(), (a, b)) for a, b in seqs), reverse=True)
-    normal = e[e <= eps]
-    vals = [v for v, _ in peaks] + [normal.max() if len(normal) else 0.0]
+    if normal_max is None:
+        normal = e[e <= eps]
+        normal_max = normal.max() if len(normal) else 0.0
+    vals = [v for v, _ in peaks] + [normal_max]
     last = -1
     for i in range(len(peaks)):
         if (vals[i] - vals[i + 1]) / max(vals[i], 1e-12) >= p:
@@ -93,6 +107,13 @@ def detect(test, cal, cfg: Config, smoothed=None):
     `smoothed` may carry the precomputed (test_smoothed, cal_smoothed) pair for cfg.span.
     """
     s, c = smoothed if smoothed is not None else (ewma(test, cfg.span), ewma(cal, cfg.span))
+    if cfg.method == "telemanom":
+        # authors' default post-processing: windowed dynamic threshold, 100-step error buffer, pruning
+        mask = windowed_mask(s)
+        seqs = to_sequences(mask, pad=100, merge_gap=200)
+        flagged = to_sequences(mask, pad=0, merge_gap=0)
+        normal_max = s[~mask].max() if (~mask).any() else 0.0
+        return prune(seqs, s, None, cfg.prune, normal_max=normal_max)
     if cfg.method == "static_k":
         eps = c.mean() + cfg.param * c.std()
     elif cfg.method == "static_max":

@@ -230,6 +230,7 @@ MODELS = {
     "cnn": lambda: Forecaster("cnn"), "lstm_ae": LSTMAutoencoder,
     # sensitivity variants of the GRU (not part of the main table)
     "gru_h32": lambda: Forecaster("gru", hidden=32), "gru_h128": lambda: Forecaster("gru", hidden=128),
+    "gru_h256": lambda: Forecaster("gru", hidden=256),
     "gru_w50": lambda: Forecaster("gru", w=50), "gru_w200": lambda: Forecaster("gru", w=200),
     "gru_nocmd": lambda: Forecaster("gru", cmd=False),
 }

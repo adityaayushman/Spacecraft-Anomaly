@@ -185,20 +185,12 @@ footer a { color: var(--accent); }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 const DATA = /*__DATA__*/null;
-const MODELS = [
-  { n: "moving_avg", f1: .673, lo: .57, hi: .77, pa: .818, pt: .110 },
-  { n: "persistence", f1: .595, lo: .51, hi: .71, pa: .835, pt: .074 },
-  { n: "gru", f1: .594, lo: .51, hi: .68, pa: .638, pt: .281 },
-  { n: "ridge_ar", f1: .552, lo: .48, hi: .64, pa: .646, pt: .185 },
-  { n: "lstm_ae", f1: .518, lo: .43, hi: .61, pa: .483, pt: .361 },
-  { n: "lstm", f1: .512, lo: .42, hi: .61, pa: .565, pt: .304 },
-  { n: "cnn", f1: .471, lo: .37, hi: .60, pa: .615, pt: .274 },
-  { n: "iforest", f1: .286, lo: .21, hi: .37, pa: .298, pt: .173 },
-];
+const MODELS = DATA.models;
+const PERS = MODELS.find((m) => m.n === "persistence");
 const NOTES = {
   f1: "Strict sequence F1: a labeled anomaly counts as caught if any alert overlaps it. Whiskers show the 95% interval; most models overlap each other.",
-  pa: "Point-adjusted F1 credits a whole labeled span for one hit. Persistence jumps to 0.84 here without detecting anything better.",
-  pt: "Point-wise F1 counts every timestep. Persistence falls to 0.07: its alerts barely cover the labeled spans.",
+  pa: `Point-adjusted F1 credits a whole labeled span for one hit. Persistence jumps to ${PERS.pa.toFixed(2)} here without detecting anything better.`,
+  pt: `Point-wise F1 counts every timestep. Persistence falls to ${PERS.pt.toFixed(2)}: its alerts barely cover the labeled spans.`,
 };
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (s) => document.querySelector(s);
@@ -382,7 +374,7 @@ function renderChannelUI() {
   if (focus < 0) {
     const tot = CH.reduce((a, ch) => { const s = stat(ch); return [a[0] + s.caught, a[1] + s.total, a[2] + s.fa]; }, [0, 0, 0]);
     d.innerHTML = `<h2>All eight channels</h2><p>The GRU caught <b>${tot[0]} of ${tot[1]}</b> labeled anomalies here and raised <b>${tot[2]}</b> false alarms. Pick a channel to see its anomalies and alerts.</p>
-      <p class="note">These eight were chosen to show both outcomes, so this is not the GRU's overall hit rate: across all 81 channels its recall is 0.56. Point anomalies (a sharp excursion) are usually caught; contextual ones (normal-looking values at the wrong moment) usually are not.</p>`;
+      <p class="note">These eight were chosen to show both outcomes, so this is not the GRU's overall hit rate: across all 81 channels its recall is ${DATA.gru_recall.toFixed(2)}. Point anomalies (a sharp excursion) are usually caught; contextual ones (normal-looking values at the wrong moment) are caught far less often, roughly 30–50% depending on how alerts are post-processed.</p>`;
     return;
   }
   const ch = CH[focus], s = stat(ch);

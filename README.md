@@ -8,9 +8,9 @@ A benchmark study of whether LSTM-style models actually beat simple baselines at
 
 ## Findings
 
-1. **No neural model beats the simplest baselines.** Cross-fitted strict F1: moving average 0.67, persistence ("next value = last value") 0.60, GRU 0.59, ridge AR 0.55, LSTM-autoencoder 0.52, LSTM 0.51, CNN 0.47, Isolation Forest 0.29. The best neural model (GRU) is statistically tied with persistence (paired channel-bootstrap difference −0.007, 95% CI [−0.11, +0.09]). The moving average is nominally best, but its edge over the GRU is borderline (+0.08, CI [+0.00, +0.17]). Only Isolation Forest and the CNN are reliably worse than the GRU.
+1. **No neural model beats the simplest baselines.** Cross-fitted strict F1: moving average 0.67, persistence ("next value = last value") 0.60, GRU 0.59, ridge AR 0.55, LSTM-autoencoder 0.52, LSTM 0.51, CNN 0.47, Isolation Forest 0.29. The best neural model (GRU) is statistically tied with persistence (paired channel-bootstrap difference −0.007, 95% CI [−0.11, +0.09]). The moving average is nominally best, but its edge over the GRU is borderline (+0.08, CI [+0.00, +0.17]). Only Isolation Forest and the CNN are reliably worse than the GRU. The tie also holds under the original authors' default post-processing (see "Comparison with the original paper": GRU 0.58, persistence 0.58, LSTM 0.58, moving average 0.62).
 2. **The evaluation protocol moves scores more than the choice of model.** Persistence scores point-adjusted F1 0.84 but point-wise F1 0.07 on the same detections (figure below), and the split of channels into tuning/test folds alone shifts its strict F1 by ±0.12 (std over 5 random splits). A single split would have reported 0.62 for persistence; the 5-split mean is 0.60.
-3. **Point anomalies are caught; contextual anomalies mostly are not.** For most models, recall on the 62 point anomalies is ~0.63–0.85 but only ~0.09–0.35 on the 43 contextual anomalies. Forecast error is largely blind to contextual anomalies.
+3. **Point anomalies are caught more often than contextual ones, but the size of the gap depends on post-processing.** With my cross-fitted thresholds, recall on the 62 point anomalies is ~0.63–0.85 versus ~0.09–0.35 on the 43 contextual ones. With the original authors' default post-processing (windowed threshold, 100-step error buffer) GRU contextual recall rises from 0.28 to 0.49 (point recall stays ~0.74). The buffer also makes long labeled spans easier to hit, so part of that rise is leniency, not detection.
 4. **The ceiling is mostly the score, not the threshold.** For contextual anomalies only 30–47% have a peak score above the highest score in normal data (a zero-false-positive threshold exists), so no threshold could catch most of the rest.
 5. **Slower smoothing is not a fix.** Allowing EWMA spans up to 500 changed contextual recall unpredictably (LSTM 0.19 → 0.37, GRU 0.28 → 0.33, moving average and CNN unchanged) and moved F1 by −0.06 to +0.07, within noise (single seed and fold split; `results/span_ablation.md`).
 6. **Model settings barely matter, but capacity may help contextual anomalies.** Hidden size, window length and removing command features all leave strict F1 within noise (0.55–0.63); the only visible pattern is contextual recall rising with hidden size (0.20 → 0.32 → 0.48), a lead for follow-up rather than a conclusion (see GRU sensitivity).
@@ -54,6 +54,34 @@ Does the GRU's result depend on its settings? Same protocol (cross-fitted, 5 fol
 - **Window length (50 vs 100 vs 200) makes no visible difference.**
 - **A lead, not a result:** contextual recall rises with hidden size (32 → 64 → 128: 0.20 → 0.32 → 0.48, consistent across both seeds) while point recall dips slightly, and F1 moves only +0.04. This is one fold split and 43 contextual anomalies, so it needs hidden 256, more seeds and more splits before it can be called real.
 
+## Comparison with the original paper
+
+Hundman et al.'s released config (`khundman/telemanom`, `config.yaml`) uses an LSTM with two 80-unit layers, a 250-step input window, 10-step-ahead prediction, dropout 0.3, EWMA span 105, thresholding within trailing 2,100-step windows, a 100-step error buffer and pruning p = 0.13. The README of that repo reports, for those default parameters, **precision 87.5% and recall 80.0%** overall (SMAP 85.5% / 85.5%, MSL 92.6% / 69.4%).
+
+This repo's pipeline is a **simplified reimplementation and does not reproduce those numbers.** I applied the authors' default post-processing (fixed, nothing tuned) to my saved scores (`sad/reference_postproc.py`, `results/reference_postproc.md`):
+
+| model | seeds | precision | recall | strict F1 | point recall | contextual recall |
+|---|---|---|---|---|---|---|
+| persistence | 1 | 0.541 | 0.629 | 0.581 | 0.774 | 0.419 |
+| moving_avg | 1 | 0.667 | 0.571 | 0.615 | 0.758 | 0.302 |
+| ridge_ar | 1 | 0.634 | 0.562 | 0.596 | 0.694 | 0.372 |
+| iforest | 3 | 0.788 ± 0.046 | 0.105 ± 0.000 | 0.185 ± 0.001 | 0.129 ± 0.000 | 0.070 ± 0.000 |
+| lstm_ae | 3 | 0.776 ± 0.014 | 0.317 ± 0.004 | 0.450 ± 0.002 | 0.441 ± 0.008 | 0.140 ± 0.000 |
+| cnn | 3 | 0.499 ± 0.031 | 0.590 ± 0.013 | 0.540 ± 0.022 | 0.634 ± 0.040 | 0.527 ± 0.061 |
+| gru | 3 | 0.536 ± 0.026 | 0.638 ± 0.008 | 0.582 ± 0.017 | 0.742 ± 0.023 | 0.488 ± 0.019 |
+| lstm | 3 | 0.576 ± 0.018 | 0.581 ± 0.013 | 0.578 ± 0.014 | 0.688 ± 0.020 | 0.426 ± 0.011 |
+
+My precision (0.54–0.67 for the forecasters) is well below the published 87.5%. I cannot say why from this evidence: candidates are the longer input window and multi-step prediction, a larger network and longer training, per-channel tuning I did not replicate, or the published numbers being selected with knowledge of the test labels. Any claim here about LSTMs should be read as "for this simplified pipeline", not "for the original system". Note the original reports F0.5, not F1.
+
+## Related work and what is (not) new
+
+- **The method** is Hundman et al. ([KDD 2018](https://arxiv.org/abs/1802.04431)).
+- **Trivial baselines on this benchmark** have been reported to match or beat deep models on SMAP/MSL, e.g. the position paper [Quo Vadis, Unsupervised Time Series Anomaly Detection?](https://arxiv.org/pdf/2405.02678), which also questions label quality and anomaly density (citing Wu & Keogh, "Current Time Series Anomaly Detection Benchmarks are Flawed"). Practitioner reimplementations disagree: at least one open-source reimplementation reports that the original LSTM still leads simple baselines. The evidence is mixed.
+- **Architecture comparisons** on spacecraft telemetry already exist, e.g. [A Comparison of Deep Learning Architectures for Spacecraft Anomaly Detection](https://arxiv.org/pdf/2403.12864). I could not open the papers from the build environment (arxiv.org is blocked), so these descriptions come from search summaries, not a close reading.
+- **Point-adjusted F1 inflating scores** is well known.
+
+So the findings here mostly replicate or extend known critiques for a simplified pipeline. The additions are modest: 8 detectors under one cross-fitted protocol with paired channel bootstrap; a per-anomaly model-ceiling vs threshold-loss breakdown; and the GRU capacity and command-feature ablations. I did only a limited literature search, so I cannot claim any of these is unpublished.
+
 ## Method
 
 - **Models (8):** baselines (persistence, 10-step moving average, ridge AR on 20 steps, Isolation Forest) and neural models (2-layer LSTM, 2-layer GRU, causal dilated 1D CNN: all forecast the next value from 100 steps of telemetry + command features; plus a univariate LSTM autoencoder scoring reconstruction error). One model per channel, trained only on that channel's clean train split (80% fit / 10% early stopping / 10% calibration).
@@ -73,7 +101,8 @@ Does the GRU's result depend on its settings? Same protocol (cross-fitted, 5 fol
 - **Neural models are not tuned per channel.** Network size, window and training schedule are fixed and shared; the sensitivity study above varies hidden size, window and command features for the GRU only, with 1–2 seeds each.
 - **Dynamic thresholding uses test scores**, as in the original method; static variants use only the 10% clean calibration slice.
 - **Ceiling numbers use one smoothing span (30)**, so achieved recall can exceed the zero-FP ceiling for some models (it tolerates false positives and may use another span).
-- **No second dataset.** Transfer to the ESA anomaly benchmarks was out of reach (hosts unreachable from the build environment) and is the obvious next experiment.
+- **Not a faithful reproduction of the original system** (see "Comparison with the original paper"): different window, one-step prediction, smaller training budget, simplified thresholding, and no per-channel tuning.
+- **No second dataset.** The ESA anomaly benchmark is only hosted on Zenodo, which was not reachable from the build environment (an access request was denied), so cross-dataset transfer is untested and is the obvious next experiment.
 - **Data provenance.** NASA's original S3 bucket (`telemanom/data.zip`) now returns AccessDenied. Arrays were fetched from a public GitHub mirror. All 162 train/test files are byte-identical (SHA-256) to two other independent GitHub mirrors (one an extraction of the original zip), and all 82 test-series lengths match the official `num_values` in `labeled_anomalies.csv` (from [khundman/telemanom](https://github.com/khundman/telemanom)). They were not compared against NASA's own copy. `data/` is git-ignored (166 MB).
 
 ## Reproduce
@@ -88,6 +117,8 @@ python -m pytest -q tests
 ./run_all.sh gru_h32:0 gru_h128:0 gru_w50:0 gru_nocmd:0 gru_h32:1 gru_h128:1 gru_w50:1 gru_nocmd:1 gru_w200:0
 python -m sad.evaluate     # cross-fitted tuning, bootstrap CIs, tables -> results/
 python -m sad.analyze      # error analysis, span ablation, figures
+python -m sad.reference_postproc   # authors' default post-processing on the saved scores
+python web/build_data.py   # 3D viewer data from the results (open web/index.html)
 ```
 
 Job format is `model:seed[:i/n]` (the optional shard splits one job across workers). Code: `sad/data.py` (loading, folds), `sad/models.py` (detectors), `sad/detect.py` (thresholds), `sad/metrics.py`, `sad/evaluate.py`, `sad/analyze.py`. Per-channel scores are not committed (`results/scores/`); regenerate with the commands above.

@@ -8,12 +8,13 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from sad.data import fold_assignment, load_channel, load_labels  # noqa: E402
 from sad.detect import Config, detect, dynamic_threshold, ewma  # noqa: E402
-from sad.evaluate import load_scores  # noqa: E402
+from sad.evaluate import MAIN_MODELS, load_scores  # noqa: E402
 from sad.metrics import overlap  # noqa: E402
 
 CHANNELS = ["S-1", "G-7", "T-3", "P-1", "E-13", "D-16", "T-9", "F-7"]   # mix of catches, misses, false alarms
@@ -64,7 +65,13 @@ def main():
                          hit=any(overlap(p, (a, e)) for p in pred)) for (a, e), cls in zip(r.seqs, r.classes)],
             pred=[dict(a=b(a), b=b(e), a_s=int(a), b_s=int(e), fp=not any(overlap((a, e), t) for t in r.seqs))
                   for a, e in pred]))
-    data = dict(model=MODEL.upper(), seed=SEED, bins=N, channels=out)
+    main = pd.read_csv(ROOT / "results" / "main_results.csv")
+    boot = pd.read_csv(ROOT / "results" / "bootstrap.csv").set_index("model")
+    models = [dict(n=m, f1=round(g.f1.mean(), 3), lo=round(boot.loc[m, "ci_lo"], 3), hi=round(boot.loc[m, "ci_hi"], 3),
+                   pa=round(g.pa_f1.mean(), 3), pt=round(g.pt_f1.mean(), 3))
+              for m, g in main.groupby("model") if m in MAIN_MODELS]
+    data = dict(model=MODEL.upper(), seed=SEED, bins=N, channels=out, models=models,
+                gru_recall=round(main[main.model == "gru"].recall.mean(), 3))
     (ROOT / "web" / "data.json").write_text(json.dumps(data, separators=(",", ":")))
     tpl = (ROOT / "web" / "template.html").read_text()
     frag = tpl.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":")))

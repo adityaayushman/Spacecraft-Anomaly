@@ -24,7 +24,7 @@ OUT = ROOT / "results"
 FOLD_SEEDS = range(5)
 DETERMINISTIC = {"persistence", "moving_avg", "ridge_ar"}
 MAIN_MODELS = ["persistence", "moving_avg", "ridge_ar", "iforest", "lstm_ae", "cnn", "gru", "lstm"]
-VARIANTS = ["gru_h32", "gru_h128", "gru_w50", "gru_w200", "gru_nocmd"]
+VARIANTS = ["gru_h32", "gru_h128", "gru_h256", "gru_w50", "gru_w200", "gru_nocmd"]
 METHODS = {"static_k": "static k·σ", "static_max": "static max-margin", "dynamic": "dynamic (Hundman)", "all": "best of all"}
 B = 2000
 

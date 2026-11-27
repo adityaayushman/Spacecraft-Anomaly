@@ -109,3 +109,11 @@ def test_crossfit_never_scores_a_config_on_its_tuning_fold():
     assert chosen[0] == cfgs[0] and chosen[1] == cfgs[1]
     # fold-0 channels are scored with the config tuned on fold 1, and vice versa
     assert rows["a"] == table[cfgs[1]]["a"] and rows["c"] == table[cfgs[0]]["c"]
+
+
+def test_telemanom_postprocessing_flags_spike_and_buffers_it():
+    rng = np.random.default_rng(0)
+    e = rng.normal(1, 0.05, 6000)
+    e[3000:3010] += 3
+    seqs = detect(e, e[:200], Config(1, "telemanom", 0.0, 0.13))
+    assert len(seqs) == 1 and seqs[0][0] <= 2900 + 20 and seqs[0][1] >= 3109 - 20   # +-100 buffer
