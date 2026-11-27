@@ -1,0 +1,8 @@
+data/
+__pycache__/
+*.pyc
+run.log
+results/scores/
+results/worker*.log
+.pytest_cache/
+web/artifact.html
